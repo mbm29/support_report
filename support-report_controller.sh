@@ -9,6 +9,11 @@ ZIPREPORT=1
 CGI=0
 GETSYSTEM=1
 GETVM=1
+GETSTORAGE=1
+GETOPENFILES=1
+GETHARDWARE=1
+GETSYSLOGS=1
+GETNETCONF=1
 
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
@@ -22,11 +27,17 @@ LSPCI=$(which lspci 2>/dev/null)
 IPTABLES=$(which iptables 2>/dev/null)
 VMWARE_CHECKVM=$(which vmware-checkvm 2>/dev/null)
 VMWARE_TOOLBOX_CMD=$(which vmware-toolbox-cmd 2>/dev/null)
+COPY_PRESERVE_COMMAND="cp -af"
 
 # collection files
 SYSTEM_CONFIGFILE=$WKDIR/00-system-config.txt
 SYSTEM_PACKAGESFILE=$WKDIR/12-installed-software.txt
-VM_CONFIGFILE=$WKDIR/22-vm-system.txt
+VM_CONFIGFILE=$WKDIR/13-vm-system.txt
+STORAGE_CONFIGFILE=$WKDIR/14-storage.txt
+OPENFILES=$WKDIR/15-openfiles.txt
+HWCONF=$WKDIR/16-hwconf.txt
+NETCONF=$WKDIR/17-netconf.txt
+LOGS=$WKDIR/logs
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
@@ -108,7 +119,7 @@ function getpackages()
 function getsystem()
 {
         message "Building system configuration..."
-        echo -en "==================================== Operating System ================================= \n" >> $SYSTEM_CONFIGFILE
+        echo -en "=================================\nOperating System\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
         uname -a >> $SYSTEM_CONFIGFILE
 
  	[[ -f /etc/redhat-release ]] && $( head -1 /etc/redhat-release >> $SYSTEM_CONFIGFILE )
@@ -118,70 +129,160 @@ function getsystem()
         if [[ -x $LSB_RELEASE ]]; then
                 $LSB_RELEASE -a >> $SYSTEM_CONFIGFILE
         fi
-
-        echo -en "================================= System Specs ================================= \n" >> $SYSTEM_CONFIGFILE
-        echo "---------- CPU INFO ----------" >> $SYSTEM_CONFIGFILE        
-        cat /proc/cpuinfo >> $SYSTEM_CONFIGFILE
-        echo "---------- MEM INFO ----------" >> $SYSTEM_CONFIGFILE
-        cat /proc/meminfo >> $SYSTEM_CONFIGFILE
-        echo "---------- PCI BUS -----------" >> $SYSTEM_CONFIGFILE
-        ${LSPCI} >> $SYSTEM_CONFIGFILE
+        
+        echo -en "=================================\nLoaded Modules\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
+        $LSMOD >> $CONFIGFILE
 }        
+
+
 
 function getvmware()
 {
     if [[ $ROOT_MODE -eq 1 ]]; then
-  	  echo  -en "\nVM Check: " >> $VM_CONFIGFILE
-	    VM=`${VIRT_WHAT} 2> /dev/null`
-	    [[ -z $VM && -x $(${VIRT_WHAT}) ]] && VM=$(${VIRT_WHAT})
-	    [[ -z $VM ]] && VM="Does not appear to be a VM"
-	    echo $VM  >> $VM_CONFIGFILE
+          echo  -en "\nVM Check: " >> $VM_CONFIGFILE
+            VM=`${VIRT_WHAT} 2> /dev/null`
+            [[ -z $VM && -x $(${VIRT_WHAT}) ]] && VM=$(${VIRT_WHAT})
+            [[ -z $VM ]] && VM="Does not appear to be a VM"
+            echo $VM  >> $VM_CONFIGFILE
     fi
-    
+
     [[ -x $VMWARE_CHECKVM ]] && $( $VMWARE_CHECKVM -h >> $VM_CONFIGFILE)
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "cpu res") && ( $VMWARE_TOOLBOX_CMD stat cpures) >> $VM_CONFIGFILE)
-    
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "Host time: ") && ( $VMWARE_TOOLBOX_CMD stat hosttime)) >> $VM_CONFIGFILE
+        (echo -en "This machine time: " && date ) >> $VM_CONFIGFILE
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU speed: ") && ( $VMWARE_TOOLBOX_CMD stat speed)) >> $VM_CONFIGFILE
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU res: ") && ( $VMWARE_TOOLBOX_CMD stat cpures)) >> $VM_CONFIGFILE
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU limit: ") && ( $VMWARE_TOOLBOX_CMD stat cpulimit)) >> $VM_CONFIGFILE
+
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM baloon: ") && ( $VMWARE_TOOLBOX_CMD stat balloon)) >> $VM_CONFIGFILE
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM swap: ") && ( $VMWARE_TOOLBOX_CMD stat swap)) >> $VM_CONFIGFILE
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM res: ") && ( $VMWARE_TOOLBOX_CMD stat memres)) >> $VM_CONFIGFILE
+    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM limit: ") && ( $VMWARE_TOOLBOX_CMD stat memlimit)) >> $VM_CONFIGFILE
+}
+
+
+function gethardware()
+{
+        message -n "Copying hardware profile..."
+        echo -en "=================================\nSystem Specs\n---------------------------------\n" >> $HWCONFIG
+        echo "=================================" >> $HWCONF
+        echo "Hardware Details" >> $HWCONF
+        echo "=================================" >> $HWCONF
+
+        echo "---------- CPU INFO ----------" >> $HWCONFIG 
+        cat /proc/cpuinfo >> $SYSTEM_CONFIGFILE
+        echo "---------- MEM INFO ----------" >> $HWCONFIG
+        cat /proc/meminfo >> $SYSTEM_CONFIGFILE
+        echo "---------- PCI BUS -----------" >> $HWCONFIG
+        ${LSPCI} >> $HWCONFIG
+        
+        if [[ $ROOT_MODE -eq 1 ]]; then 
+            	dmidecode >> $HWCONF
+        else 
+        	echo "Script not run as root, hardware profile could not be collected." >> $HWCONF    	
+        fi	
+        message "done!"
+}
+
+function getnetconf()
+{
+        echo "=================================" >> $NETCONF
+        echo "Network Configuration " >> $NETCONF
+        echo "=================================" >> $NETCONF
+        echo "Network Configuration " >> $NETCONF        
+        echo "---------- Links Info ----------" >> $NETCONF
+        ip -o link >> $NETCONF
+        echo "---------- Address Info ----------" >> $NETCONF
+        ip -o address >> $NETCONF
+        echo "---------- Routes Info ----------" >> $NETCONF
+        ip -o route >> $NETCONF
+        echo "---------- Rules Info ----------" >> $NETCONF
+        ip -o rules >> $NETCONF
+        echo "---------- Network port check ----------" >> $NETCONF
+	netstat -anp >> $NETCONF        
+        
+        if [[ $ROOT_MODE -eq 1 ]]; then 
+        echo "---------- Network firewall configuration ----------" >> $NETCONF        
+            	$IPTABLES -L -nv >> $NETCONF
+        echo "---------- Network firewall configuration: NAT table ----------" >> $NETCONF                    	
+            	$IPTABLES -L -t nat -nv >> $NETCONF
+        fi	
+}
+
+
+function getstorage()
+{
+       echo -en "=================================\nStorage\n---------------------------------\n" >> $STORAGE_CONFIGFILE
+        cat /proc/partitions >> $STORAGE_CONFIGFILE
+        echo "----------------------------------" >> $STORAGE_CONFIGFILE
+        printf "%-20s%-8s\n" "Device" "Partition table" >> $STORAGE_CONFIGFILE
+
+# limited lskblk output for humans
+        lsblk -fs -t >> $STORAGE_CONFIGFILE
+        echo "----------------------------------" >> $STORAGE_CONFIGFILE
+# lskblk output for machine parsing
+# different lsblk versions have different possibilities, we want to catch all possible columns
+        lsblk_columns=$(lsblk  -h | grep '^  ' | awk '{print $1 }' |tr '\n' ',')
+        lsblk -r -i -a --output ${lsblk_columns::-1} >> $STORAGE_CONFIGFILE
+
+        echo "----------------------------------" >> $STORAGE_CONFIGFILE
+        df -Th >> $STORAGE_CONFIGFILE
+        echo -en "=================================\nMounted File Systems\n---------------------------------\n" >> $STORAGE_CONFIGFILE
+        cat /etc/mtab | egrep -i ^/dev | tr -s ' ' ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' >> $STORAGE_CONFIGFILE
+        cat /etc/mtab | egrep -iv ^/dev | tr -s ' ' ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' | sort >> $STORAGE_CONFIGFILE
+        echo -en "=================================\nConfigured File Systems\n---------------------------------\n" >> $STORAGE_CONFIGFILE
+        cat /etc/fstab | egrep -i ^/dev | tr -s [:blank:] ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' | sort >> $STORAGE_CONFIGFILE
+        cat /etc/fstab | egrep -iv ^/dev | tr -s [:blank:] ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' | sort >> $STORAGE_CONFIGFILE
+
 }
  
+function getopenfiles()
+{
+        # Print list of open files
+        message -en "Reading open files... "
+        lsof -n > $OPENFILES
+        message "done!"
+} 
+
+function getsyslogs()
+{
+    message -n "Copying system logs..."
+
+    if [[ $ROOT_MODE -eq 1 ]]; then
+        # Get system log for last $DAYS  day
+        [ -d $LOGS ] || mkdir $LOGS
+        find /var/log -iname messages* -mtime -$DAYS -exec cp -a {} $LOGS \;
+        find /var/log -iname boot.* -mtime -$DAYS -exec cp -a {} $LOGS \;
+        find /var/log -iname kernel.log* -mtime -$DAYS -exec cp -a {} $LOGS \;
+        find /var/log -iname ntp* -mtime -$DAYS -exec cp -a {} $LOGS \;
+        find /var/log -iname cron* -mtime -$DAYS -exec cp -a {} $LOGS \;
+        dmesg > $LOGS/dmesg
+
+        if [ -d /var/log/sa ]; then
+                mkdir $LOGS/sa
+                find /var/log/sa -iregex '[a-z/]*sa\.*[0-9_]+' -exec $COPY_PRESERVE_COMMAND {} $LOGS/sa/ \;
+        fi
+
+        [ -f /var/log/wtmp ] && $COPY_PRESERVE_COMMAND /var/log/wtmp $LOGS/
+
+        find /var/log -iname roothistory.log* -exec cp -a {} $LOGS \;
+        message "Done!"
+   else
+   	# as a non-root user we will be able to get only some crumbs. lets get just everything...
+   	find /var/log -mtime -$DAYS -exec cp -a {} $LOGS \;
+   fi     
+} 
+
  
-function getstorage()
+function getcostam()
 {        
-        echo -en "=================================\nStorage\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
-        cat /proc/partitions >> $CONFIGFILE
-        echo "----------------------------------" >> $CONFIGFILE
-        printf "%-20s%-8s\n" "Device" "Partition table" >> $CONFIGFILE
-#        for DEV in $(egrep -o '[sh]d[a-z]$' /proc/partitions); do
-#                TYPE=$(parted /dev/${DEV} print | egrep "Disk label|Partition Table" | cut -f2 -d':')
-#                printf "%-20s%-8s\n" "/dev/${DEV}" "$TYPE" >> $CONFIGFILE
-#        done
-
-        echo "----------------------------------" >> $CONFIGFILE
-        df -Th >> $CONFIGFILE
-        echo -en "=================================\nMounted File Systems\n---------------------------------\n" >> $CONFIGFILE
-        cat /etc/mtab | egrep -i ^/dev | tr -s ' ' ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' >> $CONFIGFILE
-        cat /etc/mtab | egrep -iv ^/dev | tr -s ' ' ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' | sort >> $CONFIGFILE
-        echo -en "=================================\nConfigured File Systems\n---------------------------------\n" >> $CONFIGFILE
-        cat /etc/fstab | egrep -i ^/dev | tr -s [:blank:] ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' | sort >> $CONFIGFILE
-        cat /etc/fstab | egrep -iv ^/dev | tr -s [:blank:] ';' | awk -F ';' '{ printf "%-15s %-15s %-10s %-20s %s %s\n",$1,$2,$3,$4,$5,$6 }' | sort >> $CONFIGFILE
-
-        echo -en "=================================\nNetwork Configuration\n---------------------------------\n" >> $CONFIGFILE
-        ifconfig -a >> $CONFIGFILE
-        echo -en "\n---------------------------------\n" >> $CONFIGFILE
-        route -n >> $CONFIGFILE
-        echo -en "=================================\nLoaded Modules\n---------------------------------\n" >> $CONFIGFILE
-        $LSMOD >> $CONFIGFILE
-
+ 
         RUNLEVEL=$(runlevel | egrep -o [0-6abcs])
         echo "Current runlevel: $RUNLEVEL" > $INITSCRIPTS
+
         if [ "$OS" == "suse" ]; then
                 ls -l /etc/init.d/rc${RUNLEVEL}.d/ >> $INITSCRIPTS
         elif [ "$OS" == "redhat" ]; then
                 ls -l /etc/rc${RUNLEVEL}.d/ >> $INITSCRIPTS
-        fi
-
-        IPTABLES=$(which iptables)
-        if [[ -x $IPTABLES ]]; then
-                $IPTABLES -L -n > $FIREWALLREPORT
         fi
 
         if [ -f /etc/modules.conf ]; then
@@ -204,9 +305,6 @@ function getstorage()
         for CONFIG_FILE in $ADDITIONAL_CONFIG_FILE_LIST; do
             [ -f $CONFIG_FILE ] && cp -a $CONFIG_FILE $WKDIR ;
         done
-
-
-
     message "done!"
 }
 
@@ -234,11 +332,15 @@ echo $REPORTFILE > $INPROGRESS_FILE;
 cd $WKDIR
 reportheader
 
+
 # collect reports
 [ $GETSYSTEM -eq 1 ] && getsystem
 [ $GETVM -eq 1 ] && getvmware
-
-
+[ $GETHARDWARE -eq 1 ] && gethardware
+[ $GETSTORAGE -eq 1 ] && getstorage
+[ $GETOPENFILES -eq 1 ] && getopenfiles
+[ $GETSYSLOGS -eq 1 ] && getsyslogs
+[ $GETNETCONF -eq 1 ] && getnetconf
 
 
 
@@ -260,7 +362,7 @@ elif [ $ZIPREPORT -eq 1 ]; then
         REPORT=$(zipreport)
         message "Done "
     echo
-    echo "The support-report can be downloaded from the servers Management Console,"
+    echo "The support-report can be downloaded from the server Management Console,"
     echo "or from"
     echo "    ${REPORTPATH}/${REPORTFILE}"
         echo "You will be directed where to submit this report by your technical support contact."
