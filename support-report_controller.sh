@@ -63,15 +63,16 @@ RESOLVFILE=$WKDIR/23-resolv.conf
 ROOTCRON=$WKDIR/24-root-crontab.txt
 NTPCONFIG=$WKDIR/25-ntp-config.txt
 INITSCRIPTS=$WKDIR/26-initscripts.txt
+PACKAGESFILE=$WKDIR/27-packages.txt
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
 APPLOGS=$WKDIR/app-logs
 REPORTPATH=/tmp/download
-ADDITIONAL_CONFIG_FILES="/etc/resolv.conf"
+ADDITIONAL_CONFIG_FILES=""
+
 
 ROOT_MODE=1 && [[ "$(whoami)" != "root" ]] && ROOT_MODE=0
-
 
 function message()
 {
@@ -136,10 +137,17 @@ function usage()
 function getpackages()
 {
         message -n "Building package list..."
-        rpm -qa | sort  >> $PACKAGEFILE
+	[[ LINUX_FLAVOUR -eq "rhel" ]] rpm -qa --queryformat "%{NAME} %{VERSION}\n" | sort  >> $PACKAGESFILE
+	[[ LINUX_FLAVOUR -eq "debian" ]] dpkg-query -W -f='${Package} ${Version}\n' | sort  >> $PACKAGESFILE	        
         message "done!"
 }
 
+function getlinuxflavour()
+{
+        _out=$(cat /etc/[A-Za-z]*[_-][rv]e[lr]* | uniq -u)
+        [[ $(echo ${_out} | grep -i -e '[debian|ubuntu]' ) ]] && LINUX_FLAVOUR=debian
+        [[ $(echo ${_out} | grep -i rhel) ]] && LINUX_FLAVOUR=redhat
+}
 
 
 function getsystem()
@@ -151,12 +159,14 @@ function getsystem()
  	[[ -f /etc/redhat-release ]] && $( head -1 /etc/redhat-release >> $SYSTEM_CONFIGFILE )
         [[ -f /etc/debian_version ]] && $( head -1 /etc/debian_version >> $SYSTEM_CONFIGFILE )
         
+        cat /etc/*-release | uniq -u >> $SYSTEM_CONFIGFILE
+        
 
         if [[ -x $LSB_RELEASE ]]; then
                 $LSB_RELEASE -a >> $SYSTEM_CONFIGFILE
         fi
         
-        echo -en "=================================\nLoaded Modules\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
+	echo -en "=================================\nLoaded Modules\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
         $LSMOD >> $SYSTEM_CONFIGFILE
 
         if [ -f /etc/modules.conf ]; then
@@ -165,14 +175,14 @@ function getsystem()
                 cp -a /etc/modprobe.conf* $WKDIR
         fi
 
-       echo -en "=================================\nLast logins\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
-       last -20 >> $SYSTEM_CONFIGFILE
+	echo -en "=================================\nLast logins\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
+	last -20 >> $SYSTEM_CONFIGFILE
 
-       sysctl -A 2>/dev/null > $SYSCTL
+	sysctl -A 2>/dev/null > $SYSCTL
        
 	[ $ROOT_MODE -eq 1 ] && cat /proc/slabinfo > $SLABINFO
         
-       [ -d /sys ] && ls -laR /sys 2>/dev/null > $SYSTREE  
+	[ -d /sys ] && ls -laR /sys 2>/dev/null > $SYSTREE  
        
        
         # Get list of cron jobs
@@ -186,9 +196,8 @@ function getsystem()
         for CONFIG_FILE in $ADDITIONAL_CONFIG_FILE_LIST; do
             [ -f $CONFIG_FILE ] && cp -a $CONFIG_FILE $WKDIR ;
         done
-
-       
-       
+        
+        getpackages
 }        
 
 
@@ -340,8 +349,24 @@ function getinitinfo()
         ls -l /etc/rc${RUNLEVEL}.d/* >> $INITSCRIPTS
 }
 
+function subpath()
+{
+	echo "$1"  | cut -d"/" -f1-$2 
+}
 
+function appd_variables()
+{
+	global CONTROLLER_PID=$(ps xau | grep "[a]ppdynamics.controller.port" | awk '{print $2}')
+	global APPD_HOME=subpath $(readlink /proc/$CONTROLLER_PID/cwd) 8
+	global CONTROLLER_HOME=subpath $(readlink /proc/$CONTROLLER_PID/cwd) 5
+	
+	
+}
 
+function appd_getenvironment()
+{
+	/proc/$CONTROLLER_PID/exe -version >> 
+}
 
 
 [ $ROOT_MODE ] && warning  "You should run this script as root. Only limited information will be available in report."
