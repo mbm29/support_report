@@ -67,8 +67,8 @@ PACKAGESFILE=$WKDIR/27-packages.txt
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
-APPLOGS=$WKDIR/app-logs
-REPORTPATH=/tmp/download
+APPLOGS=$WKDIR/controller-logs
+REPORTPATH=/appdynamics/platform/product/controller/appserver/glassfish/domains/domain1/applications/controller/controller-web_war/download/
 ADDITIONAL_CONFIG_FILES=""
 
 
@@ -137,8 +137,9 @@ function usage()
 function getpackages()
 {
         message -n "Building package list..."
-	[[ LINUX_FLAVOUR -eq "rhel" ]] rpm -qa --queryformat "%{NAME} %{VERSION}\n" | sort  >> $PACKAGESFILE
-	[[ LINUX_FLAVOUR -eq "debian" ]] dpkg-query -W -f='${Package} ${Version}\n' | sort  >> $PACKAGESFILE	        
+        echo linux flavour - $LINUX_FLAVOUR
+	[[ LINUX_FLAVOUR -eq "rhel" ]] && rpm -qa --queryformat "%{NAME} %{VERSION}\n" | sort  >> $PACKAGESFILE
+	[[ LINUX_FLAVOUR -eq "debian" ]] && dpkg-query -W -f='${Package} ${Version}\n' | sort  >> $PACKAGESFILE
         message "done!"
 }
 
@@ -214,11 +215,10 @@ function getvmware()
 
     [[ -x $VMWARE_CHECKVM ]] && $( $VMWARE_CHECKVM -h >> $VM_CONFIGFILE)
     [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "Host time: ") && ( $VMWARE_TOOLBOX_CMD stat hosttime)) >> $VM_CONFIGFILE
-        (echo -en "This machine time: " && date ) >> $VM_CONFIGFILE
+    (echo -en "This machine time: " && date ) >> $VM_CONFIGFILE
     [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU speed: ") && ( $VMWARE_TOOLBOX_CMD stat speed)) >> $VM_CONFIGFILE
     [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU res: ") && ( $VMWARE_TOOLBOX_CMD stat cpures)) >> $VM_CONFIGFILE
     [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU limit: ") && ( $VMWARE_TOOLBOX_CMD stat cpulimit)) >> $VM_CONFIGFILE
-
     [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM baloon: ") && ( $VMWARE_TOOLBOX_CMD stat balloon)) >> $VM_CONFIGFILE
     [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM swap: ") && ( $VMWARE_TOOLBOX_CMD stat swap)) >> $VM_CONFIGFILE
     [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM res: ") && ( $VMWARE_TOOLBOX_CMD stat memres)) >> $VM_CONFIGFILE
@@ -301,7 +301,7 @@ function getopenfiles()
         message -en "Reading open files... "
         $LSOF -n -X > $OPENFILES
         message "done!"
-} 
+}
 
 function getsyslogs()
 {
@@ -365,7 +365,7 @@ function appd_variables()
 
 function appd_getenvironment()
 {
-	/proc/$CONTROLLER_PID/exe -version >> 
+	/proc/$CONTROLLER_PID/exe -version >> $JAVAINFO
 }
 
 
@@ -388,6 +388,8 @@ echo $REPORTFILE > $INPROGRESS_FILE;
 [ $? -eq '0' ] || err "Could not create working directory $WKDIR"
 [ -d $REPORTPATH ] || $( mkdir $REPORTPATH )
 cd $WKDIR
+
+getlinuxflavour
 reportheader
 
 
