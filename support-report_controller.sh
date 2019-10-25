@@ -432,6 +432,7 @@ elif [ $ZIPREPORT -eq 1 ]; then
     echo "The support-report can be downloaded from the server Management Console,"
     echo "or from"
     echo "   $(eval echo ${REPORTPATH})/${REPORTFILE}"
+    echo " or https://$(ip ro g 8.8.8.8| grep src | awk '{print $7}'):8181/controller/download/${REPORTFILE}"
         echo "You will be directed where to submit this report by your technical support contact."
         exit 0
 else
