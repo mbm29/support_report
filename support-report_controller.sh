@@ -74,7 +74,8 @@ APPD_CONTROLLER_HOME="/opt/appd/platform/product/controller"  #just default, thi
 APPD_CONTROLLER_PID=
 DOWNLOAD_PATH="/appserver/glassfish/domains/domain1/applications/controller/controller-web_war/download/"
 REPORTPATH="\$APPD_CONTROLLER_HOME\$DOWNLOAD_PATH"
-APPD_CONTROLLER_HOME="/usr"
+APPD_JAVAINFO=$WKDIR/31-javainfo.txt
+APPD_LIMITSINFO=$WKDIR/32-limits.txt
 
 ADDITIONAL_CONFIG_FILES=""
 ROOT_MODE=1 && [[ "$(whoami)" != "root" ]] && ROOT_MODE=0
@@ -370,7 +371,8 @@ function appd_variables()
 
 function appd_getenvironment()
 {
-	/proc/$APPD_CONTROLLER_PID/exe -version >> $JAVAINFO
+	/proc/$APPD_CONTROLLER_PID/exe -version 2>&1 >> $APPD_JAVAINFO
+	cat /proc/$APPD_CONTROLLER_PID/limits >> $APPD_LIMITSINFO
 }
 
 
