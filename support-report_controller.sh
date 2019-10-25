@@ -358,7 +358,7 @@ function subpath()
 
 function appd_variables()
 {
-        APPD_CONTROLLER_PID=$(ps xau | grep "[a]ppdynamics.controller.port" | awk '{print $2}')
+        APPD_CONTROLLER_PID=$(ps xau | grep "[a]ppdynamics.controller" | awk '{print $2}')
         if [[ -n $APPD_CONTROLLER_PID ]]; then
                 APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 10)
                 APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 6)
