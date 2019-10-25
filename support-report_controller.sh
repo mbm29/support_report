@@ -133,23 +133,21 @@ function usage()
 }
 
 
-
 function getpackages()
 {
-        message -n "Building package list..."
+        echo -n "Building package list..."
         echo linux flavour - $LINUX_FLAVOUR
-	[[ LINUX_FLAVOUR -eq "rhel" ]] && rpm -qa --queryformat "%{NAME} %{VERSION}\n" | sort  >> $PACKAGESFILE
-	[[ LINUX_FLAVOUR -eq "debian" ]] && dpkg-query -W -f='${Package} ${Version}\n' | sort  >> $PACKAGESFILE
-        message "done!"
+        [[ ${LINUX_FLAVOUR} = "redhat" ]] && rpm -qa --queryformat "%{NAME} %{VERSION}\n" | sort  >> $PACKAGESFILE
+        [[ ${LINUX_FLAVOUR} = "debian" ]] && dpkg-query -W -f='${Package} ${Version}\n' | sort  >> $PACKAGESFILE
+        echo "done!"
 }
 
 function getlinuxflavour()
 {
         _out=$(cat /etc/[A-Za-z]*[_-][rv]e[lr]* | uniq -u)
-        [[ $(echo ${_out} | grep -i -e '[debian|ubuntu]' ) ]] && LINUX_FLAVOUR=debian
-        [[ $(echo ${_out} | grep -i rhel) ]] && LINUX_FLAVOUR=redhat
+        [[ $(echo ${_out} | grep -i -e '[debian|ubuntu]') ]] && LINUX_FLAVOUR=debian
+        [[ $(echo ${_out} | grep -i -e '[rhel|redhat]') ]] && LINUX_FLAVOUR=redhat
 }
-
 
 function getsystem()
 {
