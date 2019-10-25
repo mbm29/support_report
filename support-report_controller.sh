@@ -148,8 +148,8 @@ function getpackages()
 function getlinuxflavour()
 {
         _out=$(cat /etc/[A-Za-z]*[_-][rv]e[lr]* | uniq -u)
-        [[ $(echo ${_out} | grep -i -e '[debian|ubuntu]') ]] && LINUX_FLAVOUR=debian
-        [[ $(echo ${_out} | grep -i -e '[rhel|redhat]') ]] && LINUX_FLAVOUR=redhat
+        [[ $(echo ${_out} | grep -i -E -e '(debian|ubuntu)' | wc -l ) -ge 1 ]] && LINUX_FLAVOUR=debian
+        [[ $(echo ${_out} | grep -i -E -e '(rhel|redhat)'| wc -l ) -ge 1 ]] && LINUX_FLAVOUR=redhat
 }
 
 function getsystem()
