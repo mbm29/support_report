@@ -16,6 +16,7 @@ GETSYSLOGS=1
 GETNETCONF=1
 GETNTPCONFIG=1
 GETINIINFO=1
+GETAPPD=1
 
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
@@ -68,10 +69,14 @@ PACKAGESFILE=$WKDIR/27-packages.txt
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
 APPLOGS=$WKDIR/controller-logs
-REPORTPATH=/appdynamics/platform/product/controller/appserver/glassfish/domains/domain1/applications/controller/controller-web_war/download/
+APPD_HOME="/opt/appd" #just default
+APPD_CONTROLLER_HOME="/opt/appd/platform/product/controller"  #just default, this is re-evaluating later
+APPD_CONTROLLER_PID=
+DOWNLOAD_PATH="/appserver/glassfish/domains/domain1/applications/controller/controller-web_war/download/"
+REPORTPATH="\$APPD_CONTROLLER_HOME\$DOWNLOAD_PATH"
+APPD_CONTROLLER_HOME="/usr"
+
 ADDITIONAL_CONFIG_FILES=""
-
-
 ROOT_MODE=1 && [[ "$(whoami)" != "root" ]] && ROOT_MODE=0
 
 function message()
@@ -94,17 +99,16 @@ function err()
         exit 1
 }
 
-
 function zipreport()
 {
         cd $(dirname $WKDIR)
 #       zip -q9r $REPORTPATH/$REPORTFILE $(basename $WKDIR)
 # zip could be preferable, easier for CU to review archive, but this tool is not always available.
-        tar cfvz $REPORTPATH/$REPORTFILE $(basename $WKDIR)
+        tar cfvz $(eval echo ${REPORTPATH})/$REPORTFILE $(basename $WKDIR)
         cd $OLDPWD
         rm -rf $WKDIR
 
-        if [ -f $REPORTPATH/$REPORTFILE ]; then
+        if [ -f $(eval echo ${REPORTPATH})/$REPORTFILE ]; then
                 echo $REPORTFILE
         else
                 err "Report $REPORTFILE  could not be created"
@@ -131,7 +135,6 @@ function usage()
 {
 	: 
 }
-
 
 function getpackages()
 {
@@ -347,23 +350,27 @@ function getinitinfo()
         ls -l /etc/rc${RUNLEVEL}.d/* >> $INITSCRIPTS
 }
 
+
 function subpath()
 {
-	echo "$1"  | cut -d"/" -f1-$2 
+        echo "$1" |rev  | cut -d"/" -f $2- | rev
 }
 
 function appd_variables()
 {
-	global CONTROLLER_PID=$(ps xau | grep "[a]ppdynamics.controller.port" | awk '{print $2}')
-	global APPD_HOME=subpath $(readlink /proc/$CONTROLLER_PID/cwd) 8
-	global CONTROLLER_HOME=subpath $(readlink /proc/$CONTROLLER_PID/cwd) 5
-	
-	
+        APPD_CONTROLLER_PID=$(ps xau | grep "[a]ppdynamics.controller.port" | awk '{print $2}')
+        if [[ -n $APPD_CONTROLLER_PID ]]; then
+                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 10)
+                APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 6)
+        else # controller not running, we need to figureout all paths differently
+                APPD_HOME=/tmp/appd
+                APPD_CONTROLLER_HOME=/tmp/appd/controller
+        fi
 }
 
 function appd_getenvironment()
 {
-	/proc/$CONTROLLER_PID/exe -version >> $JAVAINFO
+	/proc/$APPD_CONTROLLER_PID/exe -version >> $JAVAINFO
 }
 
 
@@ -379,15 +386,15 @@ touch $INPROGRESS_FILE;
 echo $REPORTFILE > $INPROGRESS_FILE;
 
 
-
-
 # Setup work environment
-[ -d $WKDIR ] || $( mkdir $WKDIR && cd $WKDIR )
+getlinuxflavour
+appd_variables
+[ -d $WKDIR ] || $( mkdir -p $WKDIR && cd $WKDIR )
 [ $? -eq '0' ] || err "Could not create working directory $WKDIR"
-[ -d $REPORTPATH ] || $( mkdir $REPORTPATH )
+[ -d $(eval echo ${REPORTPATH}) ] || $( mkdir -p $(eval echo ${REPORTPATH}) )
 cd $WKDIR
 
-getlinuxflavour
+
 reportheader
 
 
@@ -401,7 +408,7 @@ reportheader
 [ $GETNETCONF -eq 1 ] && getnetconf
 [ $GETNTPCONFIG -eq 1 ] && getntpconfig
 [ $GETINIINFO -eq 1 ] && getinitinfo
-
+[ $GETAPPD -eq 1 ] && appd_getenvironment
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
@@ -422,7 +429,7 @@ elif [ $ZIPREPORT -eq 1 ]; then
     echo
     echo "The support-report can be downloaded from the server Management Console,"
     echo "or from"
-    echo "    ${REPORTPATH}/${REPORTFILE}"
+    echo "   $(eval echo ${REPORTPATH})/${REPORTFILE}"
         echo "You will be directed where to submit this report by your technical support contact."
         exit 0
 else
