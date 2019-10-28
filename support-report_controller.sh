@@ -372,8 +372,14 @@ function appd_variables()
 
 function appd_getenvironment()
 {
-	/proc/$APPD_CONTROLLER_PID/exe -version 2>&1 >> $APPD_JAVAINFO
-	cat /proc/$APPD_CONTROLLER_PID/limits >> $APPD_LIMITSINFO
+	/proc/$APPD_CONTROLLER_PID/exe -version >> $APPD_JAVAINFO 2>&1
+ 	echo -e "\n---------- Controller Java limits ---------- " >> $APPD_JAVAINFO
+	cat /proc/$APPD_CONTROLLER_PID/limits >> $APPD_JAVAINFO
+ 	echo -e "\n---------- Controller Java status ---------- " >> $APPD_JAVAINFO
+	cat /proc/$APPD_CONTROLLER_PID/status >> $APPD_JAVAINFO
+ 	echo -e "\n---------- Controller Java scheduler stats ---------- " >> $APPD_JAVAINFO
+ # use the source, Luke! 	kernel/sched/debug.c
+	cat /proc/$APPD_CONTROLLER_PID/sched >> $APPD_JAVAINFO
 }
 
 
