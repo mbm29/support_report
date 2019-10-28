@@ -18,6 +18,7 @@ GETNTPCONFIG=1
 GETINIINFO=1
 GETAPPD=1
 GETNUMA=1
+GETCONTROLLERLOGS=1
 
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
@@ -55,7 +56,7 @@ STORAGE_CONFIGFILE=$WKDIR/14-storage.txt
 OPENFILES=$WKDIR/15-openfiles.txt
 HWCONF=$WKDIR/16-hw-config.txt
 NETCONF=$WKDIR/17-net-config.txt
-LOGS=$WKDIR/system-logs
+LOGS=$WKDIR/system-logs/
 SYSCTL=$WKDIR/18-sysctl.txt
 SLABINFO=$WKDIR/19-slabinfo.txt
 SYSTREE=$WKDIR/20-systree.txt
@@ -78,6 +79,7 @@ DOWNLOAD_PATH="/appserver/glassfish/domains/domain1/applications/controller/cont
 REPORTPATH="\$APPD_CONTROLLER_HOME\$DOWNLOAD_PATH"
 APPD_JAVAINFO=$WKDIR/31-javainfo.txt
 APPD_LIMITSINFO=$WKDIR/32-limits.txt
+CONTROLLERLOGS=$WKDIR/controller-logs/
 
 ADDITIONAL_CONFIG_FILES=""
 ROOT_MODE=1 && [[ "$(whoami)" != "root" ]] && ROOT_MODE=0
@@ -333,7 +335,7 @@ function getsyslogs()
         message "Done!"
    else
    	# as a non-root user we will be able to get only some crumbs. lets get just everything...
-   	find /var/log -mtime -$DAYS -exec cp -a {} $LOGS \; 2>/dev/null
+   	find /var/log -name "*.*" -mtime -$DAYS -exec cp -a {} $LOGS \; 2>/dev/null
    fi     
 } 
 
@@ -394,6 +396,12 @@ function getnumastats()
 	numastat -czmn java mysql  >> $NUMAFILE
 }
 
+function getcontrollerlogs()
+{
+	find $APPD_CONTROLLER_HOME/logs/ -name "*.*" -mtime -$DAYS -exec cp -a {} $CONTROLLERLOGS \;
+}
+
+
 [ $ROOT_MODE ] && warning  "You should run this script as root. Only limited information will be available in report."
 
 # dont allow to run more than one report collection at once
@@ -410,6 +418,8 @@ echo $REPORTFILE > $INPROGRESS_FILE;
 getlinuxflavour
 appd_variables
 [ -d $WKDIR ] || $( mkdir -p $WKDIR && cd $WKDIR )
+mkdir $CONTROLLERLOGS
+mkdir $LOGS
 [ $? -eq '0' ] || err "Could not create working directory $WKDIR"
 [ -d $(eval echo ${REPORTPATH}) ] || $( mkdir -p $(eval echo ${REPORTPATH}) )
 cd $WKDIR
@@ -430,6 +440,7 @@ reportheader
 [ $GETINIINFO -eq 1 ] && getinitinfo
 [ $GETAPPD -eq 1 ] && appd_getenvironment
 [ $GETNUMA -eq 1 ] && getnumastats
+[ $GETCONTROLLERLOGS -eq 1 ] && getcontrollerlogs
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
