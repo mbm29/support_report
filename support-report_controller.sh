@@ -194,7 +194,8 @@ function getsystem()
         [ $ROOT_MODE ] && [ -f /var/spool/cron/tabs/root ] && crontab -l > $ROOTCRON
 
         $COPY_PRESERVE_COMMAND /etc/hosts $HOSTSFILE
-        $COPY_PRESERVE_COMMAND /etc/resolv.conf  $RESOLVFILE
+        # resolv.conf is often symlink
+        cp /etc/resolv.conf  $RESOLVFILE
         ADDITIONAL_CONFIG_FILE_LIST=$(echo $ADDITIONAL_CONFIG_FILES | tr ',' ' ');
         for CONFIG_FILE in $ADDITIONAL_CONFIG_FILE_LIST; do
             [ -f $CONFIG_FILE ] && cp -a $CONFIG_FILE $WKDIR ;
