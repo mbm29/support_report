@@ -17,6 +17,7 @@ GETNETCONF=1
 GETNTPCONFIG=1
 GETINIINFO=1
 GETAPPD=1
+GETNUMA=1
 
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
@@ -65,6 +66,7 @@ ROOTCRON=$WKDIR/24-root-crontab.txt
 NTPCONFIG=$WKDIR/25-ntp-config.txt
 INITSCRIPTS=$WKDIR/26-initscripts.txt
 PACKAGESFILE=$WKDIR/27-packages.txt
+NUMAFILE=$WKDIR/28-numa.txt
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
@@ -382,6 +384,15 @@ function appd_getenvironment()
 	cat /proc/$APPD_CONTROLLER_PID/sched >> $APPD_JAVAINFO
 }
 
+function getnumastats()
+{
+ 	echo -e "\n---------- Numa inventory of available nodes on the system ---------- " >> $NUMAFILE
+	numactl -H >> $NUMAFILE
+ 	echo -e "\n---------- per-NUMA-node memory statistics for operating system ---------- " >> $NUMAFILE
+	numastat >> $NUMAFILE
+	echo -e "\n---------- per-NUMA-node memory statistics for java and mysql processes ---------- " >> $NUMAFILE
+	numastat -czmn java mysql  >> $NUMAFILE
+}
 
 [ $ROOT_MODE ] && warning  "You should run this script as root. Only limited information will be available in report."
 
@@ -418,6 +429,7 @@ reportheader
 [ $GETNTPCONFIG -eq 1 ] && getntpconfig
 [ $GETINIINFO -eq 1 ] && getinitinfo
 [ $GETAPPD -eq 1 ] && appd_getenvironment
+[ $GETNUMA -eq 1 ] && getnumastats
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
