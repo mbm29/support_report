@@ -217,6 +217,7 @@ function getsystem()
 
 function getvmware()
 {
+    grep -q "^flags.*hypervisor" /proc/cpuinfo  && echo "Machine running under VM hypervisor." >> $VM_CONFIGFILE 
     if [[ $ROOT_MODE -eq 1 ]]; then
           echo  -en "\nVM Check: " >> $VM_CONFIGFILE
             VM=`${VIRT_WHAT} 2> /dev/null`
@@ -225,16 +226,21 @@ function getvmware()
             echo $VM  >> $VM_CONFIGFILE
     fi
 
-    [[ -x $VMWARE_CHECKVM ]] && $( $VMWARE_CHECKVM -h >> $VM_CONFIGFILE)
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "Host time: ") && ( $VMWARE_TOOLBOX_CMD stat hosttime)) >> $VM_CONFIGFILE
-    (echo -en "This machine time: " && date ) >> $VM_CONFIGFILE
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU speed: ") && ( $VMWARE_TOOLBOX_CMD stat speed)) >> $VM_CONFIGFILE
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU res: ") && ( $VMWARE_TOOLBOX_CMD stat cpures)) >> $VM_CONFIGFILE
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU limit: ") && ( $VMWARE_TOOLBOX_CMD stat cpulimit)) >> $VM_CONFIGFILE
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM baloon: ") && ( $VMWARE_TOOLBOX_CMD stat balloon)) >> $VM_CONFIGFILE
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM swap: ") && ( $VMWARE_TOOLBOX_CMD stat swap)) >> $VM_CONFIGFILE
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM res: ") && ( $VMWARE_TOOLBOX_CMD stat memres)) >> $VM_CONFIGFILE
-    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM limit: ") && ( $VMWARE_TOOLBOX_CMD stat memlimit)) >> $VM_CONFIGFILE
+    if [[ -x $VMWARE_CHECKVM ]]; then
+	$VMWARE_CHECKVM >/dev/null
+	if [ $? -eq 0 ]; then
+	    [[ -x $VMWARE_CHECKVM ]] && $( $VMWARE_CHECKVM -h >> $VM_CONFIGFILE)
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "Host time: ") && ( $VMWARE_TOOLBOX_CMD stat hosttime)) >> $VM_CONFIGFILE
+	    (echo -en "This machine time: " && date ) >> $VM_CONFIGFILE
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU speed: ") && ( $VMWARE_TOOLBOX_CMD stat speed)) >> $VM_CONFIGFILE
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU res: ") && ( $VMWARE_TOOLBOX_CMD stat cpures)) >> $VM_CONFIGFILE
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "CPU limit: ") && ( $VMWARE_TOOLBOX_CMD stat cpulimit)) >> $VM_CONFIGFILE
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM baloon: ") && ( $VMWARE_TOOLBOX_CMD stat balloon)) >> $VM_CONFIGFILE
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM swap: ") && ( $VMWARE_TOOLBOX_CMD stat swap)) >> $VM_CONFIGFILE
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM res: ") && ( $VMWARE_TOOLBOX_CMD stat memres)) >> $VM_CONFIGFILE
+	    [[ -x $VMWARE_TOOLBOX_CMD ]] && (  (echo -en "MEM limit: ") && ( $VMWARE_TOOLBOX_CMD stat memlimit)) >> $VM_CONFIGFILE
+	fi
+    fi		    
 }
 
 
@@ -397,14 +403,18 @@ function appd_variables()
 
 function appd_getenvironment()
 {
-	/proc/$APPD_CONTROLLER_PID/exe -version >> $APPD_JAVAINFO 2>&1
- 	echo -e "\n---------- Controller Java limits ---------- " >> $APPD_JAVAINFO
-	cat /proc/$APPD_CONTROLLER_PID/limits >> $APPD_JAVAINFO
- 	echo -e "\n---------- Controller Java status ---------- " >> $APPD_JAVAINFO
-	cat /proc/$APPD_CONTROLLER_PID/status >> $APPD_JAVAINFO
- 	echo -e "\n---------- Controller Java scheduler stats ---------- " >> $APPD_JAVAINFO
- # use the source, Luke! 	kernel/sched/debug.c
-	cat /proc/$APPD_CONTROLLER_PID/sched >> $APPD_JAVAINFO
+        if [[ -n $APPD_CONTROLLER_PID ]]; then
+		/proc/$APPD_CONTROLLER_PID/exe -version >> $APPD_JAVAINFO 2>&1
+	 	echo -e "\n---------- Controller Java limits ---------- " >> $APPD_JAVAINFO
+		cat /proc/$APPD_CONTROLLER_PID/limits >> $APPD_JAVAINFO
+	 	echo -e "\n---------- Controller Java status ---------- " >> $APPD_JAVAINFO
+		cat /proc/$APPD_CONTROLLER_PID/status >> $APPD_JAVAINFO
+	 	echo -e "\n---------- Controller Java scheduler stats ---------- " >> $APPD_JAVAINFO
+		 # use the source, Luke! 	kernel/sched/debug.c
+		cat /proc/$APPD_CONTROLLER_PID/sched >> $APPD_JAVAINFO
+	else
+                echo -e "Java Controller process is not running." >> $APPD_JAVAINFO
+	fi
 }
 
 function getnumastats()
@@ -508,7 +518,7 @@ elif [ $ZIPREPORT -eq 1 ]; then
     echo "The support-report can be downloaded from the server Management Console,"
     echo "or from"
     echo "   $(eval echo ${REPORTPATH})/${REPORTFILE}"
-    echo " or https://$(ip ro g 8.8.8.8| grep src | awk '{print $7}'):8181/controller/download/${REPORTFILE}"
+    echo -e " or \nhttps://$(ip ro g 8.8.8.8| grep src | awk '{print $7}'):8181/controller/download/${REPORTFILE}"
         echo "You will be directed where to submit this report by your technical support contact."
         exit 0
 else
