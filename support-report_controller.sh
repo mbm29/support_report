@@ -10,7 +10,7 @@ CGI=0
 GETSYSTEM=1
 GETVM=1
 GETSTORAGE=1
-GETOPENFILES=1
+GETOPENFILES=0
 GETHARDWARE=1
 GETSYSLOGS=1
 GETNETCONF=1
@@ -19,6 +19,9 @@ GETINIINFO=1
 GETAPPD=1
 GETNUMA=1
 GETCONTROLLERLOGS=1
+GETCONTROLLERMYSQLLOGS=1
+GETCONTROLLERCONFIGS=1
+
 
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
@@ -80,6 +83,8 @@ REPORTPATH="\$APPD_CONTROLLER_HOME\$DOWNLOAD_PATH"
 APPD_JAVAINFO=$WKDIR/31-javainfo.txt
 APPD_LIMITSINFO=$WKDIR/32-limits.txt
 CONTROLLERLOGS=$WKDIR/controller-logs/
+CONTROLLERMYSQLLOGS=$WKDIR/controller-mysql-logs/
+CONTROLLERCONFIGS=$WKDIR/controller-configs/
 
 ADDITIONAL_CONFIG_FILES=""
 ROOT_MODE=1 && [[ "$(whoami)" != "root" ]] && ROOT_MODE=0
@@ -239,9 +244,9 @@ function gethardware()
         echo -en "=================================\nSystem Specs\n---------------------------------\n" >> $HWCONF
         echo "---------- CPU INFO ----------" >> $HWCONF
         cat /proc/cpuinfo >> $HWCONF
-        echo "---------- MEM INFO ----------" >> $HWCONF
+        echo -e "\n---------- MEM INFO ----------" >> $HWCONF
         cat /proc/meminfo >> $HWCONF
-        echo "---------- PCI BUS -----------" >> $HWCONF
+        echo -e "\n---------- PCI BUS -----------" >> $HWCONF
         ${LSPCI} >> $HWCONF
 
         if [[ $ROOT_MODE -eq 1 ]]; then 
@@ -256,21 +261,21 @@ function getnetconf()
 {
         echo "=================================" >> $NETCONF
         echo "Network Configuration " >> $NETCONF
-        echo "---------- Links Info ----------" >> $NETCONF
+        echo -e "\n---------- Links Info ----------" >> $NETCONF
         $IP -o -s link >> $NETCONF
-        echo "---------- Address Info ----------" >> $NETCONF
+        echo -e "\n---------- Address Info ----------" >> $NETCONF
         $IP -o address >> $NETCONF
-        echo "---------- Routes Info ----------" >> $NETCONF
+        echo -e "\n---------- Routes Info ----------" >> $NETCONF
         $IP -o route >> $NETCONF
-        echo "---------- Rules Info ----------" >> $NETCONF
+        echo -e "\n---------- Rules Info ----------" >> $NETCONF
         $IP -o rule >> $NETCONF
-        echo "---------- Network sockets ----------" >> $NETCONF
+        echo -e "\n---------- Network sockets ----------" >> $NETCONF
         $SS -anp >> $NETCONF
 
         if [[ $ROOT_MODE -eq 1 ]]; then 
-        echo "---------- Network firewall configuration ----------" >> $NETCONF
+        echo -e "\n---------- Network firewall configuration ----------" >> $NETCONF
             $IPTABLES -L -nv >> $NETCONF
-        echo "---------- Network firewall configuration: NAT table ----------" >> $NETCONF
+        echo -e "\n---------- Network firewall configuration: NAT table ----------" >> $NETCONF
             $IPTABLES -L -t nat -nv >> $NETCONF
         fi
 }
@@ -313,10 +318,9 @@ function getopenfiles()
 function getsyslogs()
 {
     message -n "Copying system logs..."
-
+    [ -d $LOGS ] || mkdir $LOGS
     if [[ $ROOT_MODE -eq 1 ]]; then
         # Get system log for last $DAYS  day
-        [ -d $LOGS ] || mkdir $LOGS
         find /var/log -iname messages* -mtime -$DAYS -exec cp -a {} $LOGS \;
         find /var/log -iname boot.* -mtime -$DAYS -exec cp -a {} $LOGS \;
         find /var/log -iname kernel.log* -mtime -$DAYS -exec cp -a {} $LOGS \;
@@ -364,13 +368,24 @@ function subpath()
 
 function appd_variables()
 {
+#/appdynamics/platform/product/controller/appserver/glassfish/domains/domain1/config
         APPD_CONTROLLER_PID=$(ps xau | grep "[a]ppdynamics.controller" | awk '{print $2}')
         if [[ -n $APPD_CONTROLLER_PID ]]; then
-                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 10)
+                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 9)
                 APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 6)
-        else # controller not running, we need to figureout all paths differently
-                APPD_HOME=/tmp/appd
-                APPD_CONTROLLER_HOME=/tmp/appd/controller
+        else # controller is not running, we need to figureout all paths differently
+        # lets check if just controller DB is running ?
+		MYSQL_CONTROLLER_PID=$(ps xau | grep "[p]latform/product/controller/db/bin/mysql" | awk '{print $2}')
+        	if [[ -n $MYSQL_CONTROLLER_PID ]]; then
+#/appdynamics/platform/product/controller/db/data
+	                APPD_HOME=$(subpath $(readlink /proc/$MYSQL_CONTROLLER_PID/cwd) 6)
+        	        APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$MYSQL_CONTROLLER_PID/cwd) 3)
+                else # controller and DB are not running. so sad... lets try something else yet
+			_dir=$(find / -name controller.sh -print -quit 2>/dev/null)
+#/appdynamics/platform/product/controller/bin/controller.sh			
+                	APPD_HOME=$(subpath $_dir 6)
+                	APPD_CONTROLLER_HOME=$(subpath $_dir 3)
+        	fi
         fi
 }
 
@@ -398,11 +413,35 @@ function getnumastats()
 
 function getcontrollerlogs()
 {
+        [ -d $CONTROLLERLOGS ] || mkdir $CONTROLLERLOGS
 	find $APPD_CONTROLLER_HOME/logs/ -name "*.*" -mtime -$DAYS -exec cp -a {} $CONTROLLERLOGS \;
 }
 
+function getmysqlcontrollselogs()
+{
+#/appdynamics/platform/product/controller/db/logs/
+        [ -d $CONTROLLERMYSQLLOGS ] || mkdir $CONTROLLERMYSQLLOGS
+        find $APPD_CONTROLLER_HOME/db/logs/ -name "*.*" -mtime -$DAYS -exec cp -a {} $CONTROLLERMYSQLLOGS \;
+}
 
-[ $ROOT_MODE ] && warning  "You should run this script as root. Only limited information will be available in report."
+function getcontrollerconfigs()
+{
+#/appdynamics/platform/product/controller/appserver/glassfish/domains/domain1/config
+        [ -d $CONTROLLERCONFIGS ] || mkdir $CONTROLLERCONFIGS
+	find $APPD_CONTROLLER_HOME/appserver/glassfish/domains/domain1/config -name "*.*" -exec cp -a {} $CONTROLLERCONFIGS \;
+}
+
+
+# strings platform/mysql/data/platform_admin/configuration_store.ibd | grep "JobcontrollerRootUserPassword" | tail -1 | awk -F'"' '{print $2}'^C
+function getmysqlcontrollerpass()
+{
+	# root password for controller can be stored in few places. we will try to find it.
+	# EC db
+	[[ -f $APPD_HOME/platform/mysql/data/platform_admin/configuration_store.ibd ]] && pass=$(strings $APPD_HOME/platform/mysql/data/platform_admin/configuration_store.ibd | grep "JobcontrollerRootUserPassword" | tail -1 | awk -F'"' '{print $2}')
+	echo $pass
+}
+
+[ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
 
 # dont allow to run more than one report collection at once
 if [ -f $INPROGRESS_FILE ]
@@ -418,8 +457,6 @@ echo $REPORTFILE > $INPROGRESS_FILE;
 getlinuxflavour
 appd_variables
 [ -d $WKDIR ] || $( mkdir -p $WKDIR && cd $WKDIR )
-mkdir $CONTROLLERLOGS
-mkdir $LOGS
 [ $? -eq '0' ] || err "Could not create working directory $WKDIR"
 [ -d $(eval echo ${REPORTPATH}) ] || $( mkdir -p $(eval echo ${REPORTPATH}) )
 cd $WKDIR
@@ -441,6 +478,9 @@ reportheader
 [ $GETAPPD -eq 1 ] && appd_getenvironment
 [ $GETNUMA -eq 1 ] && getnumastats
 [ $GETCONTROLLERLOGS -eq 1 ] && getcontrollerlogs
+[ $GETCONTROLLERMYSQLLOGS -eq 1 ] && getmysqlcontrollselogs
+[ $GETCONTROLLERCONFIGS -eq 1 ] && getcontrollerconfigs
+
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
