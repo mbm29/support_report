@@ -346,9 +346,15 @@ function getsyslogs()
 function getntpconfig()
 {
     message -n "Building ntpconfig..."
+    echo -e "\n---------- current system date and time ----------" >> $NTPCONFIG    
     date                 >> $NTPCONFIG
+    echo -e "\n---------- current hardware date and time ----------" >> $NTPCONFIG    
+    hwclock --get                 >> $NTPCONFIG    
+    echo -e "\n---------- NTP peers ----------" >> $NTPCONFIG
     $NTPQ -n -c peers     >> $NTPCONFIG
+    echo -e "\n---------- NTP associations ----------" >> $NTPCONFIG    
     $NTPQ -n -c as  >> $NTPCONFIG
+    echo -e "\n---------- NTP sysinfo ----------" >> $NTPCONFIG    
     $NTPQ -n -c sysinfo  >> $NTPCONFIG
     message "done!"
 }
