@@ -349,6 +349,7 @@ function getsyslogs()
    else
    	# as a non-root user we will be able to get only some crumbs. lets get just everything...
    	find /var/log -name "*.*" -mtime -$DAYS -exec cp -a {} $LOGS \; 2>/dev/null
+        dmesg > $LOGS/dmesg
    fi     
 } 
 
