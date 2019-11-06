@@ -10,7 +10,7 @@ CGI=0
 GETSYSTEM=1
 GETVM=1
 GETSTORAGE=1
-GETOPENFILES=0
+GETOPENFILES=1
 GETHARDWARE=1
 GETSYSLOGS=1
 GETNETCONF=1
@@ -165,8 +165,11 @@ function getlinuxflavour()
 function getsystem()
 {
         message "Building system configuration..."
+        echo "uptime: $(uptime)" >> $SYSTEM_CONFIGFILE
         echo -en "=================================\nOperating System\n---------------------------------\n" >> $SYSTEM_CONFIGFILE
         uname -a >> $SYSTEM_CONFIGFILE
+
+
 
  	[[ -f /etc/redhat-release ]] && $( head -1 /etc/redhat-release >> $SYSTEM_CONFIGFILE )
         [[ -f /etc/debian_version ]] && $( head -1 /etc/debian_version >> $SYSTEM_CONFIGFILE )
