@@ -21,7 +21,7 @@ GETNUMA=1
 GETCONTROLLERLOGS=1
 GETCONTROLLERMYSQLLOGS=1
 GETCONTROLLERCONFIGS=1
-
+GETLOAD=1
 
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
@@ -50,6 +50,11 @@ LSMOD=$(assign_command lsmod)
 LSOF=$(assign_command lsof)
 LSBLK=$(assign_command lsblk)
 NTPQ=$(assign_command ntpq)
+IOSTAT=$(assign_command iostat)
+VMSTAT=$(assign_command vmstat)
+MPSTAT=$(assign_command mpstat)
+TOP=$(assign_command top)
+SAR=$(assign_command sar)
 
 # collection files
 SYSTEM_CONFIGFILE=$WKDIR/11-system-config.txt
@@ -71,6 +76,7 @@ NTPCONFIG=$WKDIR/25-ntp-config.txt
 INITSCRIPTS=$WKDIR/26-initscripts.txt
 PACKAGESFILE=$WKDIR/27-packages.txt
 NUMAFILE=$WKDIR/28-numa.txt
+PERFSTATS=$WKDIR/29-perfstats.txt
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
@@ -461,6 +467,23 @@ function getmysqlcontrollerpass()
 	echo $pass
 }
 
+
+function getloadstats()
+{
+                message -n "Measuring basic system load... "
+	        echo -en "=================================\nDisk IO usage\n---------------------------------\n" >> $PERFSTATS
+                $IOSTAT -myxd 5 3 >> $PERFSTATS
+	        echo -en "=================================\nCPU and interrupts usage\n---------------------------------\n" >> $PERFSTATS
+                $MPSTAT -A 5 3 >> $PERFSTATS
+                echo -en "=================================\nMemory Utilization\n---------------------------------\n" >> $PERFSTATS
+                $VMSTAT 5 3 >> $PERFSTATS
+                echo -en "=================================\nNetwork Utilization\n---------------------------------\n" >> $PERFSTATS
+                $SAR -n DEV 30 2 >> $PERFSTATS
+                message "done!"
+}
+
+
+
 [ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
 
 # dont allow to run more than one report collection at once
@@ -500,7 +523,7 @@ reportheader
 [ $GETCONTROLLERLOGS -eq 1 ] && getcontrollerlogs
 [ $GETCONTROLLERMYSQLLOGS -eq 1 ] && getmysqlcontrollselogs
 [ $GETCONTROLLERCONFIGS -eq 1 ] && getcontrollerconfigs
-
+[ $GETLOAD -eq  1 ] && getloadstats
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
