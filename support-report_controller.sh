@@ -434,7 +434,7 @@ function getnumastats()
  	echo -e "\n---------- per-NUMA-node memory statistics for operating system ---------- " >> $NUMAFILE
 	numastat >> $NUMAFILE
 	echo -e "\n---------- per-NUMA-node memory statistics for java and mysql processes ---------- " >> $NUMAFILE
-	numastat -czmn java mysql  >> $NUMAFILE
+	numastat -czmns java mysql  >> $NUMAFILE
 }
 
 function getcontrollerlogs()
