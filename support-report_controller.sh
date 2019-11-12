@@ -22,7 +22,9 @@ GETCONTROLLERLOGS=1
 GETCONTROLLERMYSQLLOGS=1
 GETCONTROLLERCONFIGS=1
 GETLOAD=1
+GETUSERLIMITS=1
 
+ROOT_USER="root"
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
 INPROGRESS_FILE="/tmp/support_report.in_progress"
@@ -40,6 +42,7 @@ function assign_command()
 VIRT_WHAT=$(assign_command virt_what)
 LSB_RELEASE=$(assign_command lsb_release)
 LSPCI=$(assign_command lspci)
+LSCPU=$(assign_command lscpu)
 IPTABLES=$(assign_command iptables)
 VMWARE_CHECKVM=$(assign_command vmware-checkvm)
 VMWARE_TOOLBOX_CMD=$(assign_command vmware-toolbox-cmd)
@@ -55,6 +58,7 @@ VMSTAT=$(assign_command vmstat)
 MPSTAT=$(assign_command mpstat)
 TOP=$(assign_command top)
 SAR=$(assign_command sar)
+DMIDECODE=$(assign_command dmidecode)
 
 # collection files
 SYSTEM_CONFIGFILE=$WKDIR/11-system-config.txt
@@ -77,17 +81,19 @@ INITSCRIPTS=$WKDIR/26-initscripts.txt
 PACKAGESFILE=$WKDIR/27-packages.txt
 NUMAFILE=$WKDIR/28-numa.txt
 PERFSTATS=$WKDIR/29-perfstats.txt
+APPD_JAVAINFO=$WKDIR/30-javainfo.txt
+APPD_MYSQLINFO=$WKDIR/31-mysqlinfo.txt
+APPD_INSTALL_USER_LIMITS=$WKDIR/32-install-user-limits.txt
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
 APPLOGS=$WKDIR/controller-logs
 APPD_HOME="/opt/appd" #just default
 APPD_CONTROLLER_HOME="/opt/appd/platform/product/controller"  #just default, this is re-evaluating later
-APPD_CONTROLLER_PID=
+APPD_CONTROLLER_GLASSFISH_PID=
+APPD_CONTROLLER_MYSQL_PID=
 DOWNLOAD_PATH="/appserver/glassfish/domains/domain1/applications/controller/controller-web_war/download/"
 REPORTPATH="\$APPD_CONTROLLER_HOME\$DOWNLOAD_PATH"
-APPD_JAVAINFO=$WKDIR/31-javainfo.txt
-APPD_LIMITSINFO=$WKDIR/32-limits.txt
 CONTROLLERLOGS=$WKDIR/controller-logs/
 CONTROLLERMYSQLLOGS=$WKDIR/controller-mysql-logs/
 CONTROLLERCONFIGS=$WKDIR/controller-configs/
@@ -257,17 +263,21 @@ function gethardware()
 {
         message -n "Copying hardware profile..."
         echo -en "=================================\nSystem Specs\n---------------------------------\n" >> $HWCONF
-        echo "---------- CPU INFO ----------" >> $HWCONF
+        echo -e "\n---------------------------------\n Summarised CPU INFO\n ---------------------------------" >> $HWCONF
+        ${LSCPU} >> $HWCONF
+        echo -e "\n---------------------------------\n Detailed CPU INFO \n ---------------------------------" >> $HWCONF
         cat /proc/cpuinfo >> $HWCONF
-        echo -e "\n---------- MEM INFO ----------" >> $HWCONF
+        echo -e "\n----------\n MEM INFO\n ----------" >> $HWCONF
         cat /proc/meminfo >> $HWCONF
-        echo -e "\n---------- PCI BUS -----------" >> $HWCONF
+        echo -e "\n---------- \n PCI BUS \n-----------" >> $HWCONF
         ${LSPCI} >> $HWCONF
 
         if [[ $ROOT_MODE -eq 1 ]]; then 
-            dmidecode >> $HWCONF
-        else 
-            echo -en "\nScript has been not run by root, full hardware profile could not be collected." >> $HWCONF
+            ${DMIDECODE} >> $HWCONF
+        else
+           echo -e "\n---------- \ndmidecode \n-----------" >> $HWCONF
+           sudo ${DMIDECODE} >> $HWCONF
+           echo -en "\nScript has been not run by root, full hardware profile could not be collected." >> $HWCONF
         fi
         message "done!"
 }
@@ -391,17 +401,17 @@ function subpath()
 function appd_variables()
 {
 #/appdynamics/platform/product/controller/appserver/glassfish/domains/domain1/config
-        APPD_CONTROLLER_PID=$(ps xau | grep "[a]ppdynamics.controller" | awk '{print $2}')
-        if [[ -n $APPD_CONTROLLER_PID ]]; then
-                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 9)
-                APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_PID/cwd) 6)
+        APPD_CONTROLLER_GLASSFISH_PID=$(pgrep -f "s/glassfish.jar ")
+        APPD_CONTROLLER_MYSQL_PID=$(pgrep -f "[d]b/bin/mysqld")
+        if [[ -n $APPD_CONTROLLER_GLASSFISH_PID ]]; then
+                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 9)
+                APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 6)
         else # controller is not running, we need to figureout all paths differently
         # lets check if just controller DB is running ?
-		MYSQL_CONTROLLER_PID=$(ps xau | grep "[p]latform/product/controller/db/bin/mysql" | awk '{print $2}')
-        	if [[ -n $MYSQL_CONTROLLER_PID ]]; then
+        	if [[ -n $APPD_CONTROLLER_MYSQL_PID ]]; then
 #/appdynamics/platform/product/controller/db/data
-	                APPD_HOME=$(subpath $(readlink /proc/$MYSQL_CONTROLLER_PID/cwd) 6)
-        	        APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$MYSQL_CONTROLLER_PID/cwd) 3)
+	                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_MYSQL_PID/cwd) 6)
+        	        APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_MYSQL_PID/cwd) 3)
                 else # controller and DB are not running. so sad... lets try something else yet
 			_dir=$(find / -name controller.sh -print -quit 2>/dev/null)
 #/appdynamics/platform/product/controller/bin/controller.sh			
@@ -409,21 +419,44 @@ function appd_variables()
                 	APPD_CONTROLLER_HOME=$(subpath $_dir 3)
         	fi
         fi
+        APPD_CONTROLLER_INSTALL_USER=$(awk -F= '$1 ~ /^\s*user/ {print $2}' ${APPD_CONTROLLER_HOME}/db/db.cnf)
+            if [ -z "${APPD_CONTROLLER_INSTALL_USER}" ] ; then
+               APPD_CONTROLLER_INSTALL_USER=ROOT_USER
+            fi
 }
 
 function appd_getenvironment()
 {
-        if [[ -n $APPD_CONTROLLER_PID ]]; then
-		/proc/$APPD_CONTROLLER_PID/exe -version >> $APPD_JAVAINFO 2>&1
+    if [[ -n $APPD_CONTROLLER_GLASSFISH_PID ]]; then
+        echo -e "\n---------- Controller Java PID ---------- " >> $APPD_JAVAINFO
+        echo $APPD_CONTROLLER_GLASSFISH_PID >> $APPD_JAVAINFO
+        echo -e "\n---------- Controller Java version ---------- " >> $APPD_JAVAINFO
+		/proc/$APPD_CONTROLLER_GLASSFISH_PID/exe -version >> $APPD_JAVAINFO 2>&1
 	 	echo -e "\n---------- Controller Java limits ---------- " >> $APPD_JAVAINFO
-		cat /proc/$APPD_CONTROLLER_PID/limits >> $APPD_JAVAINFO
+		cat /proc/$APPD_CONTROLLER_GLASSFISH_PID/limits >> $APPD_JAVAINFO
 	 	echo -e "\n---------- Controller Java status ---------- " >> $APPD_JAVAINFO
-		cat /proc/$APPD_CONTROLLER_PID/status >> $APPD_JAVAINFO
+		cat /proc/$APPD_CONTROLLER_GLASSFISH_PID/status >> $APPD_JAVAINFO
 	 	echo -e "\n---------- Controller Java scheduler stats ---------- " >> $APPD_JAVAINFO
 		 # use the source, Luke! 	kernel/sched/debug.c
-		cat /proc/$APPD_CONTROLLER_PID/sched >> $APPD_JAVAINFO
+		cat /proc/$APPD_CONTROLLER_GLASSFISH_PID/sched >> $APPD_JAVAINFO
 	else
-                echo -e "Java Controller process is not running." >> $APPD_JAVAINFO
+                echo -e "Controller Java process is not running." >> $APPD_JAVAINFO
+	fi
+
+	if [[ -n $APPD_CONTROLLER_MYSQL_PID ]]; then
+	    echo -e "\n---------- Controller MySQL PID ---------- " >> $APPD_MYSQLINFO
+        echo $APPD_CONTROLLER_MYSQL_PID >> $APPD_MYSQLINFO
+        echo -e "\n---------- Controller MySQL version ---------- " >> $APPD_MYSQLINFO
+		/proc/$APPD_CONTROLLER_MYSQL_PID/exe --version >> $APPD_MYSQLINFO 2>&1
+	 	echo -e "\n---------- Controller MySQL limits ---------- " >> $APPD_MYSQLINFO
+		cat /proc/$APPD_CONTROLLER_MYSQL_PID/limits >> $APPD_MYSQLINFO
+	 	echo -e "\n---------- Controller MySQL status ---------- " >> $APPD_MYSQLINFO
+		cat /proc/$APPD_CONTROLLER_MYSQL_PID/status >> $APPD_MYSQLINFO
+	 	echo -e "\n---------- Controller MySQL scheduler stats ---------- " >> $APPD_MYSQLINFO
+		 # use the source, Luke! 	kernel/sched/debug.c
+		cat /proc/$APPD_CONTROLLER_MYSQL_PID/sched >> $APPD_MYSQLINFO
+	else
+                echo -e "Controller MySQL process is not running." >> $APPD_MYSQLINFO
 	fi
 }
 
@@ -482,7 +515,14 @@ function getloadstats()
                 message "done!"
 }
 
-
+function getinstalluserlimits()
+{
+            message -n "Fetching install user ulimits... "
+            echo -en "=================================\nInstall User\n---------------------------------\n" >> $APPD_INSTALL_USER_LIMITS
+            echo $APPD_CONTROLLER_INSTALL_USER >> $APPD_INSTALL_USER_LIMITS
+	        echo -en "=================================\nulimits\n---------------------------------\n" >> $APPD_INSTALL_USER_LIMITS
+            sudo su - $APPD_CONTROLLER_INSTALL_USER -c "ulimit -a" >> $APPD_INSTALL_USER_LIMITS
+}
 
 [ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
 
@@ -524,6 +564,7 @@ reportheader
 [ $GETCONTROLLERMYSQLLOGS -eq 1 ] && getmysqlcontrollselogs
 [ $GETCONTROLLERCONFIGS -eq 1 ] && getcontrollerconfigs
 [ $GETLOAD -eq  1 ] && getloadstats
+[ $GETUSERLIMITS -eq  1 ] && getinstalluserlimits
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
