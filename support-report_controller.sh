@@ -276,7 +276,7 @@ function gethardware()
             ${DMIDECODE} >> $HWCONF
         else
            echo -e "\n---------- \ndmidecode \n-----------" >> $HWCONF
-           sudo ${DMIDECODE} >> $HWCONF
+           sudo --non-interactive ${DMIDECODE} >> $HWCONF
            echo -en "\nScript has been not run by root, full hardware profile could not be collected." >> $HWCONF
         fi
         message "done!"
@@ -521,7 +521,7 @@ function getinstalluserlimits()
             echo -en "=================================\nInstall User\n---------------------------------\n" >> $APPD_INSTALL_USER_LIMITS
             echo $APPD_CONTROLLER_INSTALL_USER >> $APPD_INSTALL_USER_LIMITS
 	        echo -en "=================================\nulimits\n---------------------------------\n" >> $APPD_INSTALL_USER_LIMITS
-            sudo su - $APPD_CONTROLLER_INSTALL_USER -c "ulimit -a" >> $APPD_INSTALL_USER_LIMITS
+            sudo --non-interactive su - $APPD_CONTROLLER_INSTALL_USER -c "ulimit -a" >> $APPD_INSTALL_USER_LIMITS
 }
 
 [ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
