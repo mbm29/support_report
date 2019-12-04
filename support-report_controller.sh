@@ -24,12 +24,15 @@ GETCONTROLLERCONFIGS=1
 GETLOAD=1
 GETUSERLIMITS=1
 GETCERTSINFO=1
+GETMYSQLQUERIES=1
 
 ROOT_USER="root"
+MYSQL_PORT="3388"
 SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
 INPROGRESS_FILE="/tmp/support_report.in_progress"
 REPORTFILE="support-report_$(hostname)_${SDATE}.tar.gz"
+mysql_password=
 
 # trap ctrl-c and clean before exit
 trap ctrl_c INT
@@ -93,6 +96,7 @@ APPD_JAVAINFO=$WKDIR/30-javainfo.txt
 APPD_MYSQLINFO=$WKDIR/31-mysqlinfo.txt
 APPD_INSTALL_USER_LIMITS=$WKDIR/32-install-user-limits.txt
 APPD_CERTS=$WKDIR/33-controller-certs.txt
+APPD_QUERIES=$WKDIR/34-controller-queries.txt
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
@@ -179,7 +183,6 @@ function usage()
 
         exit 2
 }
-
 
 function getpackages()
 {
@@ -445,8 +448,29 @@ function appd_variables()
         fi
         APPD_CONTROLLER_INSTALL_USER=$(awk -F= '$1 ~ /^\s*user/ {print $2}' ${APPD_CONTROLLER_HOME}/db/db.cnf)
             if [ -z "${APPD_CONTROLLER_INSTALL_USER}" ] ; then
-               APPD_CONTROLLER_INSTALL_USER=ROOT_USER
+               APPD_CONTROLLER_INSTALL_USER=${ROOT_USER}
             fi
+        APPD_DB_INSTALL_PORT=$(awk -F= '$1 ~ /^\s*port/ {print $2}' ${APPD_CONTROLLER_HOME}/db/db.cnf)
+            if [ -z "${APPD_DB_INSTALL_PORT}" ] ; then
+               APPD_DB_INSTALL_PORT=${MYSQL_PORT}
+            fi
+}
+
+function get_mysql_data()
+{
+MYSQL="${APPD_CONTROLLER_HOME}/db/bin/mysql"
+mysqlopts="-A -t -vvv --force --host=localhost --protocol=TCP --user=root "
+echo -e "\n---------- Controller Profile Information ---------- " >> $APPD_QUERIES
+$MYSQL $mysqlopts --port=$APPD_DB_INSTALL_PORT --password=$mysql_password <<EOF
+tee $APPD_QUERIES
+use controller;
+select version() mysql_version;
+select name, value from global_configuration_cluster where name in ('schema.version', 'performance.profile','appserver.mode','ha.controller.type');
+select from_unixtime(ts_min*60), NOW(), count(distinct(node_id)), count(*) from metricdata_min where ts_min > (select max(ts_min) - 10 from metricdata_min) group by 1 order by 1;
+select from_unixtime(ts_min*60), NOW(), count(distinct(node_id)), count(*) metric_count from metricdata_hour where ts_min > (select max(ts_min) - 10080 from metricdata_hour) group by 1 ORDER BY metric_count DESC LIMIT 10;
+SELECT table_name FROM   information_schema.key_column_usage WHERE  table_name LIKE 'metricdata%' AND table_name != 'metricdata_min' AND table_name != 'metricdata_min_agg' AND column_name = 'ts_min' AND ordinal_position = 1;
+select name,value from global_configuration;
+EOF
 }
 
 function appd_getenvironment()
@@ -564,7 +588,7 @@ function getinstalluserlimits()
 
 
 
-while getopts ":aclpwvzd:" opt; do
+while getopts ":aclpwvzdP:" opt; do
         case $opt in
                 a  )    GETCONTROLLERLOGS=0
                                 ;;
@@ -580,6 +604,9 @@ while getopts ":aclpwvzd:" opt; do
                                 ;;
                 d  )    DAYS=$OPTARG
                                 ;;
+                P)
+                        mysql_password=$OPTARG
+                                ;;
                 v  )    version
                                 ;;
                 \? )   usage
@@ -587,6 +614,13 @@ while getopts ":aclpwvzd:" opt; do
         esac
 done
 
+if [ -z $mysql_password ]
+then
+stty -echo
+printf "MySQL root user password: "
+read mysql_password
+stty echo
+fi
 
 [ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
 
@@ -630,6 +664,7 @@ reportheader
 [ $GETLOAD -eq  1 ] && getloadstats
 [ $GETUSERLIMITS -eq  1 ] && getinstalluserlimits
 [ $GETCERTSINFO -eq  1 ] && get_keystore_info
+[ $GETMYSQLQUERIES -eq  1 ] && get_mysql_data
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
