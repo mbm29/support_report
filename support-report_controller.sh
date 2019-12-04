@@ -162,7 +162,19 @@ function reportheader()
 
 function usage()
 {
-	:
+        FORMAT="%5s\t%-30s\n"
+
+    echo "Usage: $(basename $0) [-v] [ -crposwlinmkVG <0|1> ] [ -d days of logs ]"
+        printf $FORMAT "-c" "Disable generating system configuration"
+        printf $FORMAT "-p" "Disable measuring system load/performance"
+        printf $FORMAT "-w" "Disable generating hardware report"
+        printf $FORMAT "-l" "Disable gathering system logs"
+        printf $FORMAT "-a" "Disable gathering AppD logs"
+        printf $FORMAT "-d" "Number of days back of logs to retrieve (default is $DAYS days)"
+        printf $FORMAT "-z" "Do not zip report and leave it in /tmp"
+        printf $FORMAT "-v" "Version"
+
+        exit 2
 }
 
 
