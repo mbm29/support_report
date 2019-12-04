@@ -164,10 +164,10 @@ function usage()
 {
         FORMAT="%5s\t%-30s\n"
 
-    echo "Usage: $(basename $0) [-v] [ -crposwlinmkVG <0|1> ] [ -d days of logs ]"
+    echo "Usage: $(basename $0) [ -vcpHlaz ] [ -d days of logs ]"
         printf $FORMAT "-c" "Disable generating system configuration"
         printf $FORMAT "-p" "Disable measuring system load/performance"
-        printf $FORMAT "-w" "Disable generating hardware report"
+        printf $FORMAT "-H" "Disable generating hardware report"
         printf $FORMAT "-l" "Disable gathering system logs"
         printf $FORMAT "-a" "Disable gathering AppD logs"
         printf $FORMAT "-d" "Number of days back of logs to retrieve (default is $DAYS days)"
