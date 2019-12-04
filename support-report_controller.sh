@@ -3,7 +3,7 @@
 # AppDynamics Cisco Technical Support report generator for Controller host
 #
 
-VERSION=0.1
+VERSION=0.3
 DAYS=3
 ZIPREPORT=1
 CGI=0
@@ -23,6 +23,7 @@ GETCONTROLLERMYSQLLOGS=1
 GETCONTROLLERCONFIGS=1
 GETLOAD=1
 GETUSERLIMITS=1
+GETCERTSINFO=1
 
 ROOT_USER="root"
 SDATE=$(date +%F_%T | tr ":" '-')
@@ -91,12 +92,14 @@ PERFSTATS=$WKDIR/29-perfstats.txt
 APPD_JAVAINFO=$WKDIR/30-javainfo.txt
 APPD_MYSQLINFO=$WKDIR/31-mysqlinfo.txt
 APPD_INSTALL_USER_LIMITS=$WKDIR/32-install-user-limits.txt
+APPD_CERTS=$WKDIR/33-controller-certs.txt
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
 APPLOGS=$WKDIR/controller-logs
 APPD_HOME="/opt/appd" #just default
 APPD_CONTROLLER_HOME="/opt/appd/platform/product/controller"  #just default, this is re-evaluating later
+APPD_CONTROLLER_JAVA_HOME=""
 APPD_CONTROLLER_GLASSFISH_PID=
 APPD_CONTROLLER_MYSQL_PID=
 DOWNLOAD_PATH="/appserver/glassfish/domains/domain1/applications/controller/controller-web_war/download/"
@@ -426,6 +429,7 @@ function appd_variables()
         if [[ -n $APPD_CONTROLLER_GLASSFISH_PID ]]; then
                 APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 9)
                 APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 6)
+                APPD_CONTROLLER_JAVA_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/exe) 3)
         else # controller is not running, we need to figureout all paths differently
         # lets check if just controller DB is running ?
         	if [[ -n $APPD_CONTROLLER_MYSQL_PID ]]; then
@@ -475,9 +479,22 @@ function appd_getenvironment()
 	 	echo -e "\n---------- Controller MySQL scheduler stats ---------- " >> $APPD_MYSQLINFO
 		 # use the source, Luke! 	kernel/sched/debug.c
 		cat /proc/$APPD_CONTROLLER_MYSQL_PID/sched >> $APPD_MYSQLINFO
+		
+		# some information about db size and files
+		echo -e "\n---------- Controller MySQL files ---------- " >> $APPD_MYSQLINFO
+		ls -la ${APPD_CONTROLLER_HOME}/db/data >> $APPD_MYSQLINFO
+		echo -e "\n---------- Controller MySQL file size ---------- " >> $APPD_MYSQLINFO		
+		du -hs ${APPD_CONTROLLER_HOME}/db/data/* >> $APPD_MYSQLINFO
 	else
                 echo -e "Controller MySQL process is not running." >> $APPD_MYSQLINFO
 	fi
+}
+
+function get_keystore_info()
+{
+        echo -e "\n---------- Controller Keystore content ---------- " >> $APPD_CERTS
+	$APPD_CONTROLLER_JAVA_HOME/bin/keytool -list --storepass "changeit" -rfc  -keystore ${APPD_CONTROLLER_HOME}/appserver/glassfish/domains/domain1/config/keystore.jks >> $APPD_CERTS
+	$APPD_CONTROLLER_JAVA_HOME/bin/keytool -list --storepass "changeit" -v  -keystore ${APPD_CONTROLLER_HOME}/appserver/glassfish/domains/domain1/config/keystore.jks >> $APPD_CERTS
 }
 
 function getnumastats()
@@ -612,6 +629,7 @@ reportheader
 [ $GETCONTROLLERCONFIGS -eq 1 ] && getcontrollerconfigs
 [ $GETLOAD -eq  1 ] && getloadstats
 [ $GETUSERLIMITS -eq  1 ] && getinstalluserlimits
+[ $GETCERTSINFO -eq  1 ] && get_keystore_info
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
