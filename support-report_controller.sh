@@ -162,8 +162,9 @@ function reportheader()
 
 function usage()
 {
-	: 
+	:
 }
+
 
 function getpackages()
 {
@@ -531,6 +532,32 @@ function getinstalluserlimits()
 	        echo -en "=================================\nulimits\n---------------------------------\n" >> $APPD_INSTALL_USER_LIMITS
             sudo --non-interactive su - $APPD_CONTROLLER_INSTALL_USER -c "ulimit -a" >> $APPD_INSTALL_USER_LIMITS
 }
+
+
+
+while getopts ":aclpwvzd:" opt; do
+        case $opt in
+                a  )    GETCONTROLLERLOGS=0
+                                ;;
+                c  )    GETCONFIG=0
+                                ;;
+                p  )    GETLOAD=0
+                                ;;
+                w  )    GETHARDWARE=0
+                                ;;
+                l  )    GETSYSLOGS=0
+                                ;;
+                z  )    ZIPREPORT=0
+                                ;;
+                d  )    DAYS=$OPTARG
+                                ;;
+                v  )    version
+                                ;;
+                \? )   usage
+                                ;;
+        esac
+done
+
 
 [ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
 
