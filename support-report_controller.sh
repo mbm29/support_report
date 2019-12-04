@@ -30,6 +30,13 @@ WKDIR=/tmp/support-report_$(hostname)_${SDATE}
 INPROGRESS_FILE="/tmp/support_report.in_progress"
 REPORTFILE="support-report_$(hostname)_${SDATE}.tar.gz"
 
+# trap ctrl-c and clean before exit
+trap ctrl_c INT
+function ctrl_c() {
+	rm -fr $WKDIR
+        rm $INPROGRESS_FILE
+        exit
+}
 
 # we cannot assume linux flavor, and path for tools are sometimes different or tools are not present at all on customer's server
 function assign_command()
