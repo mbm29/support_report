@@ -32,13 +32,14 @@ SDATE=$(date +%F_%T | tr ":" '-')
 WKDIR=/tmp/support-report_$(hostname)_${SDATE}
 INPROGRESS_FILE="/tmp/support_report.in_progress"
 REPORTFILE="support-report_$(hostname)_${SDATE}.tar.gz"
-mysql_password=
+mysql_password=""
 
 # trap ctrl-c and clean before exit
 trap ctrl_c INT
 function ctrl_c() {
 	rm -fr $WKDIR
         rm $INPROGRESS_FILE
+        stty echo
         exit
 }
 
@@ -456,6 +457,18 @@ function appd_variables()
             fi
 }
 
+function get_mysql_password()
+{
+if [ -z $mysql_password ]
+	then
+	stty -echo
+	printf "MySQL root user password: "
+	read mysql_password
+	stty echo
+fi
+}
+
+
 function get_mysql_data()
 {
 MYSQL="${APPD_CONTROLLER_HOME}/db/bin/mysql"
@@ -614,13 +627,6 @@ while getopts ":aclpwvzdP:" opt; do
         esac
 done
 
-if [ -z $mysql_password ]
-then
-stty -echo
-printf "MySQL root user password: "
-read mysql_password
-stty echo
-fi
 
 [ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
 
@@ -637,6 +643,7 @@ echo $REPORTFILE > $INPROGRESS_FILE;
 # Setup work environment
 getlinuxflavour
 appd_variables
+get_mysql_password
 [ -d $WKDIR ] || $( mkdir -p $WKDIR && cd $WKDIR )
 [ $? -eq '0' ] || err "Could not create working directory $WKDIR"
 [ -d $(eval echo ${REPORTPATH}) ] || $( mkdir -p $(eval echo ${REPORTPATH}) )
