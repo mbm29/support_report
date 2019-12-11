@@ -483,6 +483,7 @@ select from_unixtime(ts_min*60), NOW(), count(distinct(node_id)), count(*) from 
 select from_unixtime(ts_min*60), NOW(), count(distinct(node_id)), count(*) metric_count from metricdata_hour where ts_min > (select max(ts_min) - 10080 from metricdata_hour) group by 1 ORDER BY metric_count DESC LIMIT 10;
 SELECT table_name FROM   information_schema.key_column_usage WHERE  table_name LIKE 'metricdata%' AND table_name != 'metricdata_min' AND table_name != 'metricdata_min_agg' AND column_name = 'ts_min' AND ordinal_position = 1;
 select name,value from global_configuration;
+select * from notification_config\G;
 EOF
 }
 
