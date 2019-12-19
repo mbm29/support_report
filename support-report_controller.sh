@@ -39,7 +39,6 @@ trap ctrl_c INT
 function ctrl_c() {
 	rm -fr $WKDIR
         rm $INPROGRESS_FILE
-        stty echo
         exit
 }
 
@@ -461,10 +460,9 @@ function get_mysql_password()
 {
 if [ -z $mysql_password ]
 	then
-	stty -echo
 	printf "MySQL root user password: "
-	read mysql_password
-	stty echo
+	read -e -r -s -t15 mysql_password
+	echo ""
 fi
 }
 
