@@ -474,8 +474,7 @@ function get_mysql_data()
 MYSQL="${APPD_CONTROLLER_HOME}/db/bin/mysql"
 mysqlopts="-A -t -vvv --force --host=localhost --protocol=TCP --user=root "
 echo -e "\n---------- Controller Profile Information ---------- " >> $APPD_QUERIES
-$MYSQL $mysqlopts --port=$APPD_DB_INSTALL_PORT --password=$mysql_password <<EOF
-tee $APPD_QUERIES
+$MYSQL $mysqlopts --port=$APPD_DB_INSTALL_PORT --password=$mysql_password > $APPD_QUERIES <<EOF
 use controller;
 select version() mysql_version;
 select name, value from global_configuration_cluster where name in ('schema.version', 'performance.profile','appserver.mode','ha.controller.type');
