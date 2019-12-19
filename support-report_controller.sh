@@ -561,6 +561,7 @@ function getcontrollerconfigs()
         [ -d $CONTROLLERCONFIGS ] || mkdir $CONTROLLERCONFIGS
 	find $APPD_CONTROLLER_HOME/appserver/glassfish/domains/domain1/config -name "*.*" -exec cp -a {} $CONTROLLERCONFIGS \;
 	find $APPD_CONTROLLER_HOME/db/ -name "*.cnf" -exec cp -a {} $CONTROLLERCONFIGS \;
+	find $APPD_CONTROLLER_HOME/ -name "*.lic" -exec cp -a {} $CONTROLLERCONFIGS \;
 }
 
 
