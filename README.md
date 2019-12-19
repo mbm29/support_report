@@ -19,6 +19,7 @@ All of the above, make dependencies and requirements very low, allowing to work 
 
 ## Usage
 
+```
 # ./support-report_controller.sh --help
 Usage: support-report_controller.sh [ -vcpHlaz ] [ -d days of logs ]
    -c	Disable generating system configuration
@@ -29,8 +30,9 @@ Usage: support-report_controller.sh [ -vcpHlaz ] [ -d days of logs ]
    -d	Number of days back of logs to retrieve (default is 3 days)
    -z	Do not zip report and leave it in /tmp
    -v	Version
+```
 
-# Example output
+### Example output
 
 ```
 root@ip-172-31-33-13:/appdynamics/platform/support_report# ./support-report_controller.sh
