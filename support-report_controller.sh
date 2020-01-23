@@ -34,11 +34,16 @@ INPROGRESS_FILE="/tmp/support_report.in_progress"
 REPORTFILE="support-report_$(hostname)_${SDATE}.tar.gz"
 mysql_password=""
 
+
 # trap ctrl-c and clean before exit
-trap ctrl_c INT
-function ctrl_c() {
+function clean_after_yourself {
 	rm -fr $WKDIR
         rm $INPROGRESS_FILE
+}
+
+trap ctrl_c INT
+function ctrl_c() {
+	clean_after_yourself
         exit
 }
 
@@ -132,6 +137,7 @@ function warning()
 function err()
 {
         message "ERROR: $1"
+        clean_after_yourself
         exit 1
 }
 
@@ -362,7 +368,7 @@ function getopenfiles()
 {
         # Print list of open files
         message -en "Reading open files... "
-        $LSOF -n -X > $OPENFILES
+        $LSOF -n -b -w -P -X > $OPENFILES
         message "done!"
 }
 
@@ -430,12 +436,18 @@ function appd_variables()
         APPD_CONTROLLER_GLASSFISH_PID=$(pgrep -f "s/glassfish.jar ")
         APPD_CONTROLLER_MYSQL_PID=$(pgrep -f "[d]b/bin/mysqld")
         if [[ -n $APPD_CONTROLLER_GLASSFISH_PID ]]; then
+       	       	if ! [[ "$(whoami)" =~ ^("$(ps xau | grep $APPD_CONTROLLER_GLASSFISH_PID | tail -1 | cut -d' ' -f 1)"|root) ]]; then        	
+		        err "You must run this tool as root or as the same user who is running appd processes"
+		fi
                 APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 9)
                 APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 6)
                 APPD_CONTROLLER_JAVA_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/exe) 3)
         else # controller is not running, we need to figureout all paths differently
         # lets check if just controller DB is running ?
         	if [[ -n $APPD_CONTROLLER_MYSQL_PID ]]; then
+        	       	if ! [[ "$(whoami)" =~ ^("$(ps xau | grep $APPD_CONTROLLER_MYSQL_PID | tail -1 | cut -d' ' -f 1)"|root) ]]; then
+			        err "You must run this tool as root or as the same user who is running appd processes"
+			fi
 #/appdynamics/platform/product/controller/db/data
 	                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_MYSQL_PID/cwd) 6)
         	        APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_MYSQL_PID/cwd) 3)
