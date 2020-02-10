@@ -436,7 +436,7 @@ function appd_variables()
         APPD_CONTROLLER_GLASSFISH_PID=$(pgrep -f "s/glassfish.jar ")
         APPD_CONTROLLER_MYSQL_PID=$(pgrep -f "[d]b/bin/mysqld")
         if [[ -n $APPD_CONTROLLER_GLASSFISH_PID ]]; then
-       	       	if ! [[ "$(whoami)" =~ ^("$(ps xau | grep $APPD_CONTROLLER_GLASSFISH_PID | tail -1 | cut -d' ' -f 1)"|root) ]]; then        	
+       	       	if ! [[ "$(whoami)" =~ ^("$(ps xau | grep $APPD_CONTROLLER_GLASSFISH_PID | head -1 | cut -d' ' -f 1)"|root) ]]; then        	
 		        err "You must run this tool as root or as the same user who is running appd processes"
 		fi
                 APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 9)
@@ -445,7 +445,7 @@ function appd_variables()
         else # controller is not running, we need to figureout all paths differently
         # lets check if just controller DB is running ?
         	if [[ -n $APPD_CONTROLLER_MYSQL_PID ]]; then
-        	       	if ! [[ "$(whoami)" =~ ^("$(ps xau | grep $APPD_CONTROLLER_MYSQL_PID | tail -1 | cut -d' ' -f 1)"|root) ]]; then
+        	       	if ! [[ "$(whoami)" =~ ^("$(ps xau | grep $APPD_CONTROLLER_MYSQL_PID | head -1 | cut -d' ' -f 1)"|root) ]]; then
 			        err "You must run this tool as root or as the same user who is running appd processes"
 			fi
 #/appdynamics/platform/product/controller/db/data
@@ -639,7 +639,7 @@ while getopts ":aclpwvzdP:" opt; do
 done
 
 
-[ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
+
 
 # dont allow to run more than one report collection at once
 if [ -f $INPROGRESS_FILE ]
@@ -654,6 +654,7 @@ echo $REPORTFILE > $INPROGRESS_FILE;
 # Setup work environment
 getlinuxflavour
 appd_variables
+[ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
 get_mysql_password
 [ -d $WKDIR ] || $( mkdir -p $WKDIR && cd $WKDIR )
 [ $? -eq '0' ] || err "Could not create working directory $WKDIR"
