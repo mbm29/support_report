@@ -25,6 +25,8 @@ GETLOAD=1
 GETUSERLIMITS=1
 GETCERTSINFO=1
 GETMYSQLQUERIES=1
+GETPROCESSES=1
+GETTOP=1
 
 ROOT_USER="root"
 MYSQL_PORT="3388"
@@ -55,6 +57,8 @@ function assign_command()
 	echo ${_cmd}
 }
 
+function prepare_paths()
+{
 VIRT_WHAT=$(assign_command virt_what)
 LSB_RELEASE=$(assign_command lsb_release)
 LSPCI=$(assign_command lspci)
@@ -102,6 +106,9 @@ APPD_MYSQLINFO=$WKDIR/31-mysqlinfo.txt
 APPD_INSTALL_USER_LIMITS=$WKDIR/32-install-user-limits.txt
 APPD_CERTS=$WKDIR/33-controller-certs.txt
 APPD_QUERIES=$WKDIR/34-controller-queries.txt
+PROCESSES=$WKDIR/35-processes.txt
+TOPREPORT=$WKDIR/36-top.txt
+
 
 # product specific paths and variables
 APPD_SYSTEM_LOG_FILE="/tmp/support_report.log"
@@ -118,7 +125,7 @@ CONTROLLERMYSQLLOGS=$WKDIR/controller-mysql-logs/
 CONTROLLERCONFIGS=$WKDIR/controller-configs/
 
 ADDITIONAL_CONFIG_FILES=""
-ROOT_MODE=1 && [[ "$(whoami)" != "root" ]] && ROOT_MODE=0
+}
 
 function message()
 {
@@ -424,6 +431,22 @@ function getinitinfo()
         ls -l /etc/rc${RUNLEVEL}.d/* >> $INITSCRIPTS
 }
 
+function getprocesses()
+{
+	ps xau > $PROCESSES
+}
+
+function gettop()
+{
+echo -e "\n---------- top report, CPU usage sorted ----------" >> $TOPREPORT
+	top -b -n3 -o +%CPU | head -35	 >> $TOPREPORT
+echo -e "\n---------- top report, MEM usage sorted ----------" >> $TOPREPORT
+	top -b -o +%MEM | head -35	 >> $TOPREPORT
+echo -e "\n---------- top report, TIME usage sorted ----------" >> $TOPREPORT
+	top -b -o TIME+ | head -35   >> $TOPREPORT
+	
+}
+
 
 function subpath()
 {
@@ -442,6 +465,7 @@ function appd_variables()
                 APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 9)
                 APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/cwd) 6)
                 APPD_CONTROLLER_JAVA_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_GLASSFISH_PID/exe) 3)
+                APPD_CONTROLLER_MYSQL_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_MYSQL_PID/cwd) 2)                
         else # controller is not running, we need to figureout all paths differently
         # lets check if just controller DB is running ?
         	if [[ -n $APPD_CONTROLLER_MYSQL_PID ]]; then
@@ -451,6 +475,10 @@ function appd_variables()
 #/appdynamics/platform/product/controller/db/data
 	                APPD_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_MYSQL_PID/cwd) 6)
         	        APPD_CONTROLLER_HOME=$(subpath $(readlink /proc/$APPD_CONTROLLER_MYSQL_PID/cwd) 3)
+# TODO
+#        	        APPD_CONTROLLER_JAVA_HOME=
+#        	        APPD_CONTROLLER_MYSQL_HOME=
+        	        
                 else # controller and DB are not running. so sad... lets try something else yet
 			_dir=$(find / -name controller.sh -print -quit 2>/dev/null)
 #/appdynamics/platform/product/controller/bin/controller.sh			
@@ -458,11 +486,12 @@ function appd_variables()
                 	APPD_CONTROLLER_HOME=$(subpath $_dir 3)
         	fi
         fi
-        APPD_CONTROLLER_INSTALL_USER=$(awk -F= '$1 ~ /^\s*user/ {print $2}' ${APPD_CONTROLLER_HOME}/db/db.cnf)
+        
+        APPD_CONTROLLER_INSTALL_USER=$(awk -F= '$1 ~ /^\s*user/ {print $2}' ${APPD_CONTROLLER_MYSQL_HOME}/db.cnf)
             if [ -z "${APPD_CONTROLLER_INSTALL_USER}" ] ; then
                APPD_CONTROLLER_INSTALL_USER=${ROOT_USER}
             fi
-        APPD_DB_INSTALL_PORT=$(awk -F= '$1 ~ /^\s*port/ {print $2}' ${APPD_CONTROLLER_HOME}/db/db.cnf)
+        APPD_DB_INSTALL_PORT=$(awk -F= '$1 ~ /^\s*port/ {print $2}' ${APPD_CONTROLLER_MYSQL_HOME}/db.cnf)
             if [ -z "${APPD_DB_INSTALL_PORT}" ] ; then
                APPD_DB_INSTALL_PORT=${MYSQL_PORT}
             fi
@@ -481,7 +510,7 @@ fi
 
 function get_mysql_data()
 {
-MYSQL="${APPD_CONTROLLER_HOME}/db/bin/mysql"
+MYSQL="${APPD_CONTROLLER_MYSQL_HOME}/bin/mysql"
 mysqlopts="-A -t -vvv --force --host=localhost --protocol=TCP --user=root "
 echo -e "\n---------- Controller Profile Information ---------- " >> $APPD_QUERIES
 $MYSQL $mysqlopts --port=$APPD_DB_INSTALL_PORT --password=$mysql_password > $APPD_QUERIES <<EOF
@@ -491,8 +520,14 @@ select name, value from global_configuration_cluster where name in ('schema.vers
 select from_unixtime(ts_min*60), NOW(), count(distinct(node_id)), count(*) from metricdata_min where ts_min > (select max(ts_min) - 10 from metricdata_min) group by 1 order by 1;
 select from_unixtime(ts_min*60), NOW(), count(distinct(node_id)), count(*) metric_count from metricdata_hour where ts_min > (select max(ts_min) - 10080 from metricdata_hour) group by 1 ORDER BY metric_count DESC LIMIT 10;
 SELECT table_name FROM   information_schema.key_column_usage WHERE  table_name LIKE 'metricdata%' AND table_name != 'metricdata_min' AND table_name != 'metricdata_min_agg' AND column_name = 'ts_min' AND ordinal_position = 1;
-select name,value from global_configuration;
+select count(*) from eventdata_min;
+select event_type,count(*) as count from eventdata_min group by event_type order by count desc;
+SELECT table_name FROM information_schema.key_column_usage WHERE table_name LIKE 'metricdata%' AND table_name != 'metricdata_min' AND table_name != 'metricdata_min_agg' AND column_name = 'ts_min' AND ordinal_position = 1;
+show table status from controller where Create_options='partitioned';
+show table status from controller where Create_options != 'partitioned';
+SELECT table_schema as `Database`, table_name AS `Table`, round(((data_length + index_length) / 1024 / 1024), 2) `Size in MB` FROM information_schema.TABLES  ORDER BY (data_length + index_length) DESC;
 select * from notification_config\G;
+select name,value from global_configuration;
 EOF
 }
 
@@ -612,12 +647,14 @@ function getinstalluserlimits()
 
 
 
-while getopts ":aclpwvzdP:" opt; do
+while getopts ":acflpwvzdP:" opt; do
         case $opt in
                 a  )    GETCONTROLLERLOGS=0
                                 ;;
                 c  )    GETCONFIG=0
                                 ;;
+                f  )    GETOPENFILES=1                                
+                		;;
                 p  )    GETLOAD=0
                                 ;;
                 w  )    GETHARDWARE=0
@@ -652,16 +689,16 @@ echo $REPORTFILE > $INPROGRESS_FILE;
 
 
 # Setup work environment
-getlinuxflavour
-appd_variables
-[ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
-get_mysql_password
+ROOT_MODE=1 && [[ "$(whoami)" != "root" ]] && ROOT_MODE=0
 [ -d $WKDIR ] || $( mkdir -p $WKDIR && cd $WKDIR )
 [ $? -eq '0' ] || err "Could not create working directory $WKDIR"
 [ -d $(eval echo ${REPORTPATH}) ] || $( mkdir -p $(eval echo ${REPORTPATH}) )
 cd $WKDIR
-
-
+prepare_paths
+getlinuxflavour
+appd_variables
+[ $ROOT_MODE -eq 0 ] && warning  "You should run this script as root. Only limited information will be available in report."
+get_mysql_password
 reportheader
 
 
@@ -684,6 +721,8 @@ reportheader
 [ $GETUSERLIMITS -eq  1 ] && getinstalluserlimits
 [ $GETCERTSINFO -eq  1 ] && get_keystore_info
 [ $GETMYSQLQUERIES -eq  1 ] && get_mysql_data
+[ $GETPROCESSES -eq  1 ] && getprocesses
+[ $GETTOP -eq  1 ] && gettop
 
 # Make all report files readable
 chmod -R a+rX $WKDIR
